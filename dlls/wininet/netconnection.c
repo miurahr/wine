@@ -478,7 +478,7 @@ static long get_tls_option(void) {
         if (RegQueryValueExW(tls12_client, DisabledByDefault, NULL, &type,  (LPBYTE) &val, &size) || type != REG_DWORD) {
             tls_option |= SSL_OP_NO_TLSv1_2;
         } else {
-            tls_option |= val?0:SSL_OP_NO_TLSv1_2;
+            tls_option |= val?SSL_OP_NO_TLSv1_2:0;
         }
         RegCloseKey(tls12_client);
     } else {
@@ -489,7 +489,7 @@ static long get_tls_option(void) {
         if (RegQueryValueExW(tls11_client, DisabledByDefault, NULL, &type,  (LPBYTE) &val, &size) || type != REG_DWORD) {
             tls_option |= SSL_OP_NO_TLSv1_1;
         } else {
-            tls_option |= val?0:SSL_OP_NO_TLSv1_1;
+            tls_option |= val?SSL_OP_NO_TLSv1_1:0;
         }
         RegCloseKey(tls11_client);
     } else {
