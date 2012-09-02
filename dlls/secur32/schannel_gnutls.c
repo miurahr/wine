@@ -228,9 +228,20 @@ BOOL schan_imp_create_session(schan_imp_session *session, BOOL is_server,
         return FALSE;
     }
 
+    /* FIXME registory DisabledByDefault value does not take precedence
+       over the grbitEnabledProtocols of credential,
+       but 'Enabled' value should take precedence over it.(for ssl3.0) */
     tls_option = schan_get_tls_option();
-    enable_tls11 = (tls_option & SSL_OP_NO_TLSv1_1)?FALSE:TRUE;
-    enable_tls12 = (tls_option & SSL_OP_NO_TLSv1_2)?FALSE:TRUE;
+    if ((int)cred & SP_PROT_TLS1_1_CLIENT) {
+        enable_tls11 = TRUE;
+    } else {
+        enable_tls11 = (tls_option & SSL_OP_NO_TLSv1_1)?FALSE:TRUE;
+    }
+    if ((int)cred & SP_PROT_TLS1_2_CLIENT) {
+        enable_tls12 = TRUE;
+    } else {
+        enable_tls12 = (tls_option & SSL_OP_NO_TLSv1_2)?FALSE:TRUE;
+    }
     unsafe_rehandshake = (tls_option & SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)?TRUE:FALSE;
 
     /* FIXME: We should be using the information from the credentials here. */
