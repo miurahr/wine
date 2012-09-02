@@ -61,6 +61,7 @@ MAKE_FUNCPTR(gnutls_kx_get);
 MAKE_FUNCPTR(gnutls_mac_get);
 MAKE_FUNCPTR(gnutls_mac_get_key_size);
 MAKE_FUNCPTR(gnutls_perror);
+MAKE_FUNCPTR(gnutls_priority_init);
 MAKE_FUNCPTR(gnutls_priority_set);
 MAKE_FUNCPTR(gnutls_protocol_get_version);
 MAKE_FUNCPTR(gnutls_set_default_priority);
@@ -73,6 +74,8 @@ MAKE_FUNCPTR(gnutls_transport_set_ptr);
 MAKE_FUNCPTR(gnutls_transport_set_pull_function);
 MAKE_FUNCPTR(gnutls_transport_set_push_function);
 #undef MAKE_FUNCPTR
+
+
 
 static ssize_t schan_pull_adapter(gnutls_transport_ptr_t transport,
                                       void *buff, size_t buff_len)
@@ -148,6 +151,12 @@ static long schan_get_tls_option(void) {
         tls_option |= SSL_OP_NO_TLSv1_1;
         goto end;
     }
+
+    size = sizeof(DWORD);
+    if (RegQueryValueExW(hkey, AllowInsecureRenegoClients, NULL, &type,  (LPBYTE) &val, &size) == ERROR_SUCCESS 
+            && type == REG_DWORD) {
+        tls_option |= val?SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION:0;
+    } 
     if (RegOpenKeyExW(hkey, Protocols, 0, KEY_READ, &protocols) == ERROR_SUCCESS) {
         if (RegOpenKeyExW(protocols, TLS12_Client, 0, KEY_READ, &tls12_client) == ERROR_SUCCESS) {
             size = sizeof(DWORD);
@@ -160,7 +169,7 @@ static long schan_get_tls_option(void) {
         } else {
             tls_option |= SSL_OP_NO_TLSv1_2;
         }
-        if (RegOpenKeyExW(hkey, TLS11_Client, 0, KEY_READ, &tls11_client) == ERROR_SUCCESS) {
+        if (RegOpenKeyExW(protocols, TLS11_Client, 0, KEY_READ, &tls11_client) == ERROR_SUCCESS) {
             size = sizeof(DWORD);
             if (RegQueryValueExW(tls11_client, DisabledByDefault, NULL, &type,  (LPBYTE) &val, &size) || type != REG_DWORD) {
                 tls_option |= SSL_OP_NO_TLSv1_1;
@@ -171,39 +180,37 @@ static long schan_get_tls_option(void) {
         } else {
             tls_option |= SSL_OP_NO_TLSv1_1;
         }
-        RegCloseKey(hkey);
+        RegCloseKey(protocols);
     }
-    size = sizeof(DWORD);
-    if (RegQueryValueExW(hkey, AllowInsecureRenegoClients, NULL, &type,  (LPBYTE) &val, &size) == ERROR_SUCCESS && type == REG_DWORD) {
-        tls_option |= val?SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION:0;
-    } 
+
+    RegCloseKey(hkey);
 end:
     return tls_option;
 }
 
 static gnutls_priority_t gnutls_priorities[2][2][2];
+    /* fields: TLS1.1:TLS1.2:Unsafe renagotiation */
 
 static void schannel_gnutls_init_priorities (void)
 {
-    /* First field is "TLS1.1 enabled", second is "TLS1.2 enabled", third is "Unsafe renagotiation" */
     /* FIXME "NORMAL:%COMPAT" or "SECURE256:%COMPAT"? */
 
-    gnutls_priority_init (&gnutls_priorities[FALSE][FALSE][FALSE],
+    pgnutls_priority_init (&gnutls_priorities[FALSE][FALSE][FALSE],
         "NORMAL:%COMPAT:!VERS-TLS1.2:!VERS-TLS1.1", NULL);
-    gnutls_priority_init (&gnutls_priorities[TRUE][FALSE][FALSE],
+    pgnutls_priority_init (&gnutls_priorities[TRUE][FALSE][FALSE],
         "NORMAL:%COMPAT:!VERS-TLS1.2", NULL);
-    gnutls_priority_init (&gnutls_priorities[FALSE][TRUE][FALSE],
+    pgnutls_priority_init (&gnutls_priorities[FALSE][TRUE][FALSE],
         "NORMAL:%COMPAT:!VERS-TLS1.1", NULL);
-    gnutls_priority_init (&gnutls_priorities[TRUE][TRUE][FALSE],
+    pgnutls_priority_init (&gnutls_priorities[TRUE][TRUE][FALSE],
         "NORMAL:%COMPAT", NULL);
 
-    gnutls_priority_init (&gnutls_priorities[FALSE][FALSE][TRUE],
+    pgnutls_priority_init (&gnutls_priorities[FALSE][FALSE][TRUE],
         "NORMAL:%COMPAT:!VERS-TLS1.2:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
-    gnutls_priority_init (&gnutls_priorities[TRUE][FALSE][TRUE],
+    pgnutls_priority_init (&gnutls_priorities[TRUE][FALSE][TRUE],
         "NORMAL:%COMPAT:!VERS-TLS1.2:%UNSAFE_RENEGOTIATION", NULL);
-    gnutls_priority_init (&gnutls_priorities[FALSE][TRUE][TRUE],
+    pgnutls_priority_init (&gnutls_priorities[FALSE][TRUE][TRUE],
         "NORMAL:%COMPAT:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
-    gnutls_priority_init (&gnutls_priorities[TRUE][TRUE][TRUE],
+    pgnutls_priority_init (&gnutls_priorities[TRUE][TRUE][TRUE],
         "NORMAL:%COMPAT:%UNSAFE_RENEGOTIATION", NULL);
 }
 
@@ -221,19 +228,24 @@ BOOL schan_imp_create_session(schan_imp_session *session, BOOL is_server,
         return FALSE;
     }
 
-    /* FIXME: We should be using the information from the credentials here. */
-    FIXME("Using hardcoded \"NORMAL\" priority\n");
-    FIXME("Using some Option from registry setting\n");
     tls_option = schan_get_tls_option();
     enable_tls11 = (tls_option & SSL_OP_NO_TLSv1_1)?FALSE:TRUE;
     enable_tls12 = (tls_option & SSL_OP_NO_TLSv1_2)?FALSE:TRUE;
     unsafe_rehandshake = (tls_option & SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)?TRUE:FALSE;
+
+    /* FIXME: We should be using the information from the credentials here. */
+    FIXME("Using hardcoded priority with: TLS1.1:%s, TLS1.2:%s, UnsafeRenego:%s\n", 
+                                 enable_tls11?"enabled":"disabled",
+                                 enable_tls12?"enabled":"disabled",
+                                 unsafe_rehandshake?"enabled":"disabled"
+                                 );
     err = pgnutls_priority_set (*s, gnutls_priorities[enable_tls11][enable_tls12][unsafe_rehandshake]);
 
     if (err != GNUTLS_E_SUCCESS)
     {
         pgnutls_perror(err);
         pgnutls_deinit(*s);
+        FIXME("fail to call priority_set\n");
         return FALSE;
     }
 
@@ -563,6 +575,7 @@ BOOL schan_imp_init(void)
     LOAD_FUNCPTR(gnutls_mac_get)
     LOAD_FUNCPTR(gnutls_mac_get_key_size)
     LOAD_FUNCPTR(gnutls_perror)
+    LOAD_FUNCPTR(gnutls_priority_init);
     LOAD_FUNCPTR(gnutls_priority_set);
     LOAD_FUNCPTR(gnutls_protocol_get_version)
     LOAD_FUNCPTR(gnutls_set_default_priority)
@@ -582,6 +595,7 @@ BOOL schan_imp_init(void)
         pgnutls_perror(ret);
         goto fail;
     }
+    schannel_gnutls_init_priorities();
 
     if (TRACE_ON(secur32))
     {
