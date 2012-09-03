@@ -193,25 +193,24 @@ static gnutls_priority_t gnutls_priorities[2][2][2];
 
 static void schannel_gnutls_init_priorities (void)
 {
-    /* FIXME "NORMAL:%COMPAT" or "SECURE256:%COMPAT"? */
-
+    /* FIXME hardcoded "NORMAL" priority */
     pgnutls_priority_init (&gnutls_priorities[FALSE][FALSE][FALSE],
-        "NORMAL:%COMPAT:!VERS-TLS1.2:!VERS-TLS1.1", NULL);
+        "NORMAL:!VERS-TLS1.2:!VERS-TLS1.1", NULL);
     pgnutls_priority_init (&gnutls_priorities[TRUE][FALSE][FALSE],
-        "NORMAL:%COMPAT:!VERS-TLS1.2", NULL);
+        "NORMAL:!VERS-TLS1.2", NULL);
     pgnutls_priority_init (&gnutls_priorities[FALSE][TRUE][FALSE],
-        "NORMAL:%COMPAT:!VERS-TLS1.1", NULL);
+        "NORMAL:!VERS-TLS1.1", NULL);
     pgnutls_priority_init (&gnutls_priorities[TRUE][TRUE][FALSE],
-        "NORMAL:%COMPAT", NULL);
+        "NORMAL", NULL);
 
     pgnutls_priority_init (&gnutls_priorities[FALSE][FALSE][TRUE],
-        "NORMAL:%COMPAT:!VERS-TLS1.2:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
+        "NORMAL:!VERS-TLS1.2:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
     pgnutls_priority_init (&gnutls_priorities[TRUE][FALSE][TRUE],
-        "NORMAL:%COMPAT:!VERS-TLS1.2:%UNSAFE_RENEGOTIATION", NULL);
+        "NORMAL:!VERS-TLS1.2:%UNSAFE_RENEGOTIATION", NULL);
     pgnutls_priority_init (&gnutls_priorities[FALSE][TRUE][TRUE],
-        "NORMAL:%COMPAT:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
+        "NORMAL:!VERS-TLS1.1:%UNSAFE_RENEGOTIATION", NULL);
     pgnutls_priority_init (&gnutls_priorities[TRUE][TRUE][TRUE],
-        "NORMAL:%COMPAT:%UNSAFE_RENEGOTIATION", NULL);
+        "NORMAL:%UNSAFE_RENEGOTIATION", NULL);
 }
 
 BOOL schan_imp_create_session(schan_imp_session *session, BOOL is_server,
@@ -245,7 +244,7 @@ BOOL schan_imp_create_session(schan_imp_session *session, BOOL is_server,
     unsafe_rehandshake = (tls_option & SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)?TRUE:FALSE;
 
     /* FIXME: We should be using the information from the credentials here. */
-    FIXME("Using hardcoded priority with: TLS1.1:%s, TLS1.2:%s, UnsafeRenego:%s\n", 
+    FIXME("Using hardcoded \"NORMAL\" priority with: TLS1.1:%s, TLS1.2:%s, UnsafeRenego:%s\n",
                                  enable_tls11?"enabled":"disabled",
                                  enable_tls12?"enabled":"disabled",
                                  unsafe_rehandshake?"enabled":"disabled"
